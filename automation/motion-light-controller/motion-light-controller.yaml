@@ -1,0 +1,260 @@
+blueprint:
+  name: Smart Room Lighting with Manual Override
+  description: >
+    Automatic lighting based on occupancy and ambient light, with manual override via switches.
+    Handles multiple lights and switches with synchronization.
+  domain: automation
+  input:
+    occupancy_sensor:
+      name: Occupancy Sensor
+      description: The occupancy/motion sensor for the room
+      selector:
+        entity:
+          filter:
+            domain: binary_sensor
+            device_class:
+              - motion
+              - occupancy
+
+    illuminance_sensor:
+      name: Illuminance Sensor (Optional)
+      description: Light sensor to determine if lights are needed
+      default: ""
+      selector:
+        entity:
+          filter:
+            domain: sensor
+            device_class: illuminance
+
+    illuminance_threshold:
+      name: Illuminance Threshold
+      description: Turn on lights when below this lux value
+      default: 20
+      selector:
+        number:
+          min: 0
+          max: 500
+          unit_of_measurement: lux
+
+    main_lights:
+      name: Main Lights
+      description: The main lights to control (Hue bulbs or smart lights)
+      selector:
+        entity:
+          filter:
+            domain: light
+          multiple: true
+
+    zigbee_switches:
+      name: Zigbee Switches
+      description: Physical Zigbee switches that control the lights
+      default: []
+      selector:
+        entity:
+          filter:
+            domain: light
+          multiple: true
+
+    lights_to_keep_on_unoccupied:
+      name: Lights to Keep On When Unoccupied
+      description: Specific lights to keep on when room is unoccupied (before dim time)
+      default: []
+      selector:
+        entity:
+          filter:
+            domain: light
+          multiple: true
+
+    full_brightness:
+      name: Full Brightness
+      description: Brightness when room is occupied or manually turned on (percentage)
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+    dim_brightness:
+      name: Dim Brightness
+      description: Brightness for night mode (percentage)
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+
+    dim_after_time:
+      name: Dim After Time
+      description: Time after which to dim instead of turn off when unoccupied
+      default: "20:00:00"
+      selector:
+        time:
+
+variables:
+  has_illuminance: "{{ illuminance_sensor != '' }}"
+
+trigger:
+  # Occupancy triggers
+  - platform: state
+    entity_id: !input occupancy_sensor
+    to: "on"
+    id: occupied
+
+  - platform: state
+    entity_id: !input occupancy_sensor
+    to: "off"
+    id: unoccupied
+
+  # Zigbee switch triggers for manual override
+  - platform: state
+    entity_id: !input zigbee_switches
+    id: switch_changed
+
+condition: []
+
+action:
+  - choose:
+      # OCCUPIED AND DARK - Turn on all switches and lights at full brightness
+      - conditions:
+          - condition: trigger
+            id: occupied
+          - condition: or
+            conditions:
+              - condition: template
+                value_template: "{{ not has_illuminance }}"
+              - condition: numeric_state
+                entity_id: !input illuminance_sensor
+                below: !input illuminance_threshold
+        sequence:
+          # Turn on all Zigbee switches
+          - service: light.turn_on
+            target:
+              entity_id: !input zigbee_switches
+          # Turn on all main lights at full brightness
+          - service: light.turn_on
+            target:
+              entity_id: !input main_lights
+            data:
+              brightness_pct: !input full_brightness
+
+      # NOT OCCUPIED - Handle based on time
+      - conditions:
+          - condition: trigger
+            id: unoccupied
+        sequence:
+          - choose:
+              # After dim time - dim everything
+              - conditions:
+                  - condition: time
+                    after: !input dim_after_time
+                sequence:
+                  # Turn on all switches
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input zigbee_switches
+                  # Dim all main lights
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input main_lights
+                    data:
+                      brightness_pct: !input dim_brightness
+                  # Also dim any lights to keep on
+                  - if:
+                      - condition: template
+                        value_template: "{{ lights_to_keep_on_unoccupied | length > 0 }}"
+                    then:
+                      - service: light.turn_on
+                        target:
+                          entity_id: !input lights_to_keep_on_unoccupied
+                        data:
+                          brightness_pct: !input dim_brightness
+
+              # Before dim time - turn off most things
+              - conditions:
+                  - condition: time
+                    before: !input dim_after_time
+                sequence:
+                  # Turn off all switches
+                  - service: light.turn_off
+                    target:
+                      entity_id: !input zigbee_switches
+                  # Turn off main lights except ones to keep on
+                  - service: light.turn_off
+                    target:
+                      entity_id: >
+                        {% set to_keep = lights_to_keep_on_unoccupied %}
+                        {% set all_main = main_lights %}
+                        {{ all_main | reject('in', to_keep) | list }}
+                  # Turn on any lights that should stay on
+                  - if:
+                      - condition: template
+                        value_template: "{{ lights_to_keep_on_unoccupied | length > 0 }}"
+                    then:
+                      - service: light.turn_on
+                        target:
+                          entity_id: !input lights_to_keep_on_unoccupied
+
+      # MANUAL SWITCH TURNED ON - Turn everything on at full brightness
+      - conditions:
+          - condition: trigger
+            id: switch_changed
+          - condition: template
+            value_template: >
+              {{ trigger.to_state is not none and 
+                 trigger.from_state is not none and
+                 trigger.to_state.state == 'on' }}
+        sequence:
+          # Turn on all switches
+          - service: light.turn_on
+            target:
+              entity_id: !input zigbee_switches
+          # Turn on all main lights at full brightness
+          - service: light.turn_on
+            target:
+              entity_id: !input main_lights
+            data:
+              brightness_pct: !input full_brightness
+
+      # MANUAL SWITCH TURNED OFF - Handle based on time
+      - conditions:
+          - condition: trigger
+            id: switch_changed
+          - condition: template
+            value_template: >
+              {{ trigger.to_state is not none and 
+                 trigger.from_state is not none and
+                 trigger.to_state.state == 'off' }}
+        sequence:
+          - choose:
+              # Before dim time - turn everything off
+              - conditions:
+                  - condition: time
+                    before: !input dim_after_time
+                sequence:
+                  # Turn off all switches
+                  - service: light.turn_off
+                    target:
+                      entity_id: !input zigbee_switches
+                  # Turn off all main lights
+                  - service: light.turn_off
+                    target:
+                      entity_id: !input main_lights
+              # After dim time - turn everything to dim
+              - conditions:
+                  - condition: time
+                    after: !input dim_after_time
+                sequence:
+                  # Turn on all switches
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input zigbee_switches
+                  # Dim all main lights
+                  - service: light.turn_on
+                    target:
+                      entity_id: !input main_lights
+                    data:
+                      brightness_pct: !input dim_brightness
+
+mode: single
