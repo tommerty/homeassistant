@@ -93,6 +93,7 @@ You don't need Mushroom for this, you can simply just use Markdown or text block
 # Notes
 - I really made this for myself, and that's why I didn't put too much care into doing variables and the likes, though I may convert this to a template at some point.
 - I really don't recommend going this approach. Either use smart switches or smart bulbs, mixing the two has been a headache. In the future I'll likely just replace the bulbs and swap out the switch for one with rotarys instead. All of this is because I bought these switches and had them installed, so I don't want to waste money replacing them while "they work".
+- The reasoning behind some of the delays is because the hue lights have a smooth on/off animation that I wanted to try preserve so instead of the lights turning on and off harshly, they could fade. There's also other timers between turning on both switches. This is because my zigbee switch (2 gang) can only turn on one at a time.... facepalms. So, I've had to do this kind of delay otherwise it can get confused and fuck up.
 
 
 Please feel free to share your thoughts on this and if you have any improvement ideas, I'm sure myself and my partner would grately appreciate it!
