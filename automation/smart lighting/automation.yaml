@@ -1,0 +1,220 @@
+alias: Kitchen Smart Lighting
+description: Controls kitchen lights based on occupancy and luminance with manual override
+triggers:
+  - entity_id: binary_sensor.everything_presence_lite_e01504_occupancy
+    from: "off"
+    to: "on"
+    id: occupied
+    trigger: state
+  - entity_id: binary_sensor.everything_presence_lite_e01504_occupancy
+    from: "on"
+    to: "off"
+    id: unoccupied
+    trigger: state
+  - entity_id:
+      - light.kitchen_light_switch_light
+      - light.kitchen_light_switch_light_2
+    id: switch_changed
+    trigger: state
+  - entity_id: sensor.everything_presence_lite_e01504_illuminance
+    below: 10
+    id: became_dark
+    trigger: numeric_state
+conditions: []
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: occupied
+          - condition: template
+            value_template: "{{ is_dark }}"
+          - condition: template
+            value_template: "{{ not manual_off_recent }}"
+        sequence:
+          - entity_id: light.kitchen_light_switch_light
+            action: light.turn_on
+          - delay:
+              milliseconds: 500
+          - entity_id: light.kitchen_light_switch_light_2
+            action: light.turn_on
+          - delay:
+              seconds: 1
+          - entity_id: light.kitchen
+            data:
+              brightness_pct: "{{ target_brightness }}"
+              transition: 2
+            action: light.turn_on
+          - target:
+              entity_id: input_text.kitchen_lights_status
+            data:
+              value: >
+                Lights are on due to motion detected and below {{
+                states('sensor.everything_presence_lite_e01504_illuminance')|float(0)|round(1)
+                }} lux
+            action: input_text.set_value
+      - conditions:
+          - condition: trigger
+            id: became_dark
+          - condition: template
+            value_template: "{{ is_occupied }}"
+          - condition: template
+            value_template: "{{ not manual_off_recent }}"
+        sequence:
+          - entity_id: light.kitchen_light_switch_light
+            action: light.turn_on
+          - delay:
+              milliseconds: 500
+          - entity_id: light.kitchen_light_switch_light_2
+            action: light.turn_on
+          - delay:
+              seconds: 1
+          - entity_id: light.kitchen
+            data:
+              brightness_pct: "{{ target_brightness }}"
+              transition: 2
+            action: light.turn_on
+          - target:
+              entity_id: input_text.kitchen_lights_status
+            data:
+              value: >
+                Lights are on due to motion detected and below {{
+                states('sensor.everything_presence_lite_e01504_illuminance')|float(0)|round(1)
+                }} lux
+            action: input_text.set_value
+      - conditions:
+          - condition: trigger
+            id: unoccupied
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ is_dim_time }}"
+                  - condition: state
+                    entity_id: light.kitchen
+                    state: "on"
+                sequence:
+                  - entity_id: light.kitchen
+                    data:
+                      brightness_pct: "{{ dim_brightness }}"
+                      transition: 2
+                    action: light.turn_on
+                  - target:
+                      entity_id: input_text.kitchen_lights_status
+                    data:
+                      value: >
+                        Lights are dimmed to ({{ dim_brightness }}%) as there's
+                        no presence and it's after hours
+                    action: input_text.set_value
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not is_dim_time }}"
+                sequence:
+                  - entity_id: light.kitchen
+                    data:
+                      brightness_pct: 1
+                      transition: 2
+                    action: light.turn_on
+                  - delay:
+                      seconds: 2.5
+                  - entity_id: light.kitchen_light_switch_light
+                    action: light.turn_off
+                  - delay:
+                      milliseconds: 500
+                  - entity_id: light.kitchen_light_switch_light_2
+                    action: light.turn_off
+                  - entity_id: light.kitchen
+                    action: light.turn_off
+                  - target:
+                      entity_id: input_text.kitchen_lights_status
+                    data:
+                      value: |
+                        Lights are off as there's no one in here
+                    action: input_text.set_value
+      - conditions:
+          - condition: trigger
+            id: switch_changed
+          - condition: template
+            value_template: |
+              {{ trigger.to_state.state == 'off' and
+                 trigger.from_state.state == 'on' }}
+        sequence:
+          - target:
+              entity_id: input_datetime.kitchen_last_manual_off
+            data:
+              datetime: "{{ now() }}"
+            action: input_datetime.set_datetime
+          - entity_id: light.kitchen
+            data:
+              brightness_pct: 1
+              transition: 2
+            action: light.turn_on
+          - delay:
+              seconds: 2.5
+          - entity_id:
+              - light.kitchen_light_switch_light
+              - light.kitchen_light_switch_light_2
+            action: light.turn_off
+          - entity_id: light.kitchen
+            action: light.turn_off
+          - target:
+              entity_id: input_text.kitchen_lights_status
+            data:
+              value: |
+                Lights are off because the switch was flipped
+            action: input_text.set_value
+      - conditions:
+          - condition: trigger
+            id: switch_changed
+          - condition: template
+            value_template: |
+              {{ trigger.to_state.state == 'on' and
+                 trigger.from_state.state == 'off' }}
+        sequence:
+          - target:
+              entity_id: input_datetime.kitchen_last_manual_off
+            data:
+              datetime: "{{ now() - timedelta(hours=24) }}"
+            action: input_datetime.set_datetime
+          - entity_id: light.kitchen_light_switch_light
+            action: light.turn_on
+          - delay:
+              milliseconds: 500
+          - entity_id: light.kitchen_light_switch_light_2
+            action: light.turn_on
+          - delay:
+              seconds: 1
+          - entity_id: light.kitchen
+            data:
+              brightness_pct: "{{ target_brightness }}"
+              transition: 2
+            action: light.turn_on
+          - target:
+              entity_id: input_text.kitchen_lights_status
+            data:
+              value: |
+                Lights are on because the switch was flipped
+            action: input_text.set_value
+mode: single
+max_exceeded: silent
+variables:
+  illuminance_threshold: 10
+  dim_brightness: 10
+  full_brightness: 100
+  dim_after_time: "20:00:00"
+  dim_before_time: "06:00:00"
+  is_dark: >-
+    {{ states('sensor.everything_presence_lite_e01504_illuminance')|float(0) <
+    illuminance_threshold }}
+  is_occupied: >-
+    {{ states('binary_sensor.everything_presence_lite_e01504_occupancy') == 'on'
+    }}
+  is_dim_time: "{{ now() >= today_at(dim_after_time) or now() < today_at(dim_before_time) }}"
+  target_brightness: "{{ dim_brightness if is_dim_time else full_brightness }}"
+  last_manual_off: "{{ states('input_datetime.kitchen_last_manual_off') }}"
+  manual_off_recent: |
+    {% if last_manual_off not in ['unknown', '', 'unavailable'] %}
+      {% set last_off = states('input_datetime.kitchen_last_manual_off') | as_datetime | as_local %}
+      {{ (now() - last_off).total_seconds() < 900 }}
+    {% else %}
+      false
+    {% endif %}
