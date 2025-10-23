@@ -23,38 +23,14 @@ triggers:
 conditions: []
 actions:
   - choose:
-      - conditions:
+      - alias: "Turn On: Motion detected or it became dark"
+        conditions:
           - condition: trigger
-            id: occupied
+            id:
+              - occupied
+              - became_dark
           - condition: template
             value_template: "{{ is_dark }}"
-          - condition: template
-            value_template: "{{ not manual_off_recent }}"
-        sequence:
-          - entity_id: light.kitchen_light_switch_light
-            action: light.turn_on
-          - delay:
-              milliseconds: 500
-          - entity_id: light.kitchen_light_switch_light_2
-            action: light.turn_on
-          - delay:
-              seconds: 1
-          - entity_id: light.kitchen
-            data:
-              brightness_pct: "{{ target_brightness }}"
-              transition: 2
-            action: light.turn_on
-          - target:
-              entity_id: input_text.kitchen_lights_status
-            data:
-              value: >
-                Lights are on due to motion detected and below {{
-                states('sensor.everything_presence_lite_e01504_illuminance')|float(0)|round(1)
-                }} lux
-            action: input_text.set_value
-      - conditions:
-          - condition: trigger
-            id: became_dark
           - condition: template
             value_template: "{{ is_occupied }}"
           - condition: template
@@ -62,17 +38,16 @@ actions:
         sequence:
           - entity_id: light.kitchen_light_switch_light
             action: light.turn_on
-          - delay:
-              milliseconds: 500
           - entity_id: light.kitchen_light_switch_light_2
             action: light.turn_on
           - delay:
               seconds: 1
-          - entity_id: light.kitchen
-            data:
-              brightness_pct: "{{ target_brightness }}"
+          - data:
+              brightness_pct: "100"
               transition: 2
             action: light.turn_on
+            target:
+              entity_id: light.kitchen
           - target:
               entity_id: input_text.kitchen_lights_status
             data:
@@ -81,12 +56,14 @@ actions:
                 states('sensor.everything_presence_lite_e01504_illuminance')|float(0)|round(1)
                 }} lux
             action: input_text.set_value
-      - conditions:
+      - alias: "Turn Off / Dim: Room is unoccupied"
+        conditions:
           - condition: trigger
             id: unoccupied
         sequence:
           - choose:
-              - conditions:
+              - alias: If after hours, dim the lights
+                conditions:
                   - condition: template
                     value_template: "{{ is_dim_time }}"
                   - condition: state
@@ -105,7 +82,8 @@ actions:
                         Lights are dimmed to ({{ dim_brightness }}%) as there's
                         no presence and it's after hours
                     action: input_text.set_value
-              - conditions:
+              - alias: If not after hours, turn lights off completely
+                conditions:
                   - condition: template
                     value_template: "{{ not is_dim_time }}"
                 sequence:
@@ -130,12 +108,13 @@ actions:
                       value: |
                         Lights are off as there's no one in here
                     action: input_text.set_value
-      - conditions:
+      - alias: "Manual Override: Switch was turned off"
+        conditions:
           - condition: trigger
             id: switch_changed
           - condition: template
             value_template: |
-              {{ trigger.to_state.state == 'off' and
+              {{ trigger.to_state.state == 'off' and 
                  trigger.from_state.state == 'on' }}
         sequence:
           - target:
@@ -162,12 +141,13 @@ actions:
               value: |
                 Lights are off because the switch was flipped
             action: input_text.set_value
-      - conditions:
+      - alias: "Manual Override: Switch was turned on"
+        conditions:
           - condition: trigger
             id: switch_changed
           - condition: template
             value_template: |
-              {{ trigger.to_state.state == 'on' and
+              {{ trigger.to_state.state == 'on' and 
                  trigger.from_state.state == 'off' }}
         sequence:
           - target:
@@ -183,11 +163,12 @@ actions:
             action: light.turn_on
           - delay:
               seconds: 1
-          - entity_id: light.kitchen
-            data:
-              brightness_pct: "{{ target_brightness }}"
+          - data:
+              brightness_pct: "100"
               transition: 2
             action: light.turn_on
+            target:
+              entity_id: light.kitchen
           - target:
               entity_id: input_text.kitchen_lights_status
             data:
