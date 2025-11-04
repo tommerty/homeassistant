@@ -1,0 +1,185 @@
+alias: Android Command – Mobile App
+description: Unified Android command script for Home Assistant Companion App.
+mode: single
+fields:
+  notify_service:
+    name: Notify service
+    description: Example notify.mobile_app_tom_phone
+    required: true
+    example: notify.mobile_app_tom_phone
+    selector:
+      text: null
+  command:
+    name: Command
+    description: Which command to send
+    required: true
+    selector:
+      select:
+        mode: dropdown
+        options:
+          - label: Do Not Disturb
+            value: command_dnd
+          - label: Screen brightness level
+            value: command_screen_brightness_level
+          - label: Toggle auto screen brightness
+            value: command_auto_screen_brightness
+          - label: Launch app
+            value: command_launch_app
+          - label: Media control
+            value: command_media
+          - label: Screen on
+            value: command_screen_on
+          - label: WebView (open URL)
+            value: command_webview
+          - label: Ringer mode
+            value: command_ringer_mode
+  dnd_mode:
+    name: DND mode
+    description: For Do Not Disturb (command_dnd)
+    selector:
+      select:
+        mode: dropdown
+        options:
+          - label: "Off"
+            value: "off"
+          - label: Priority Only
+            value: priority_only
+          - label: Alarms Only
+            value: alarms_only
+          - label: Total Silence
+            value: total_silence
+  brightness_level:
+    name: Brightness level (0–255)
+    description: For screen brightness level
+    default: false
+    selector:
+      number:
+        min: 0
+        max: 255
+        step: 1
+  auto_brightness:
+    name: Auto screen brightness
+    description: Toggle for command_auto_screen_brightness
+    default: false
+    selector:
+      boolean: null
+  package_name:
+    name: Package name
+    description: For command_launch_app (e.g. com.android.chrome)
+    selector:
+      text: null
+  media_command:
+    name: Media command
+    description: For command_media
+    selector:
+      select:
+        mode: dropdown
+        options:
+          - label: Play
+            value: play
+          - label: Pause
+            value: pause
+          - label: Stop
+            value: stop
+          - label: Next
+            value: next
+          - label: Previous
+            value: previous
+          - label: Fast Forward
+            value: fast_forward
+          - label: Rewind
+            value: rewind
+          - label: Toggle Play/Pause
+            value: toggle_play_pause
+  webview_url:
+    name: WebView URL
+    description: For command_webview (open a URL or dashboard)
+    selector:
+      text: null
+  ringer_mode:
+    name: Ringer mode
+    description: For command_ringer_mode
+    selector:
+      select:
+        mode: dropdown
+        options:
+          - label: Normal
+            value: normal
+          - label: Silent
+            value: silent
+          - label: Vibrate
+            value: vibrate
+sequence:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'command_dnd' }}"
+        sequence:
+          - data:
+              message: command_dnd
+              data:
+                command: "{{ dnd_mode }}"
+            action: "{{ notify_service }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'command_screen_brightness_level' }}"
+        sequence:
+          - data:
+              message: command_screen_brightness_level
+              data:
+                level: "{{ brightness_level }}"
+            action: "{{ notify_service }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'command_auto_screen_brightness' }}"
+        sequence:
+          - data:
+              message: command_auto_screen_brightness
+              data:
+                state: "{{ 'on' if auto_brightness else 'off' }}"
+            action: "{{ notify_service }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'command_launch_app' }}"
+        sequence:
+          - data:
+              message: command_launch_app
+              data:
+                package_name: "{{ package_name }}"
+            action: "{{ notify_service }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'command_media' }}"
+        sequence:
+          - data:
+              message: command_media
+              data:
+                media_command: "{{ media_command }}"
+            action: "{{ notify_service }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'command_screen_on' }}"
+        sequence:
+          - data:
+              message: command_screen_on
+            action: "{{ notify_service }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'command_webview' }}"
+        sequence:
+          - data:
+              message: command_webview
+              data:
+                url: "{{ webview_url }}"
+            action: "{{ notify_service }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ command == 'command_ringer_mode' }}"
+        sequence:
+          - data:
+              message: command_ringer_mode
+              data:
+                mode: "{{ ringer_mode }}"
+            action: "{{ notify_service }}"
+    default: []
+icon: mdi:android
